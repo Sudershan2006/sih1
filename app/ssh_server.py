@@ -15,12 +15,13 @@ usableThreads = 12
 
 client_list = []
 allowed_hosts = firewall_server.allowed_hosts
+clients = firewall_server.clients
 
 threadpool = futures.ThreadPoolExecutor(max_workers=usableThreads)
 lock = threading.Lock()
 
 def call():
-    return client_list,allowed_hosts
+    return client_list,allowed_hosts,clients
 
 # CWD = os.path.dirname(os.path.realpath(__file__))
 hostkey = paramiko.RSAKey(filename='/home/kali/.ssh/id_rsa',password='Sudershan@98421')
@@ -33,6 +34,7 @@ def client_handler(client,server,event,ip):
     session = paramiko.Transport(client)
     session.add_server_key(hostkey)
     session.start_server(server=server,event=threading.Event())
+    print("Awaiting connection")
     chan = session.accept(20)
 
     if chan is None:
@@ -51,14 +53,14 @@ def client_handler(client,server,event,ip):
             buff = chan.recv(1024)
             if buff:
                 print(buff)
-                # ob = pickle.loads(buff)
-                # payload=ob.get('payload')
-                # ip_header=scapy.IP(payload)
-                # payload=payload[ip_header.ihl*4:]
-                # print(payload)
+                ob = pickle.loads(buff)
+                payload=ob.get('payload')
+                ip_header=scapy.IP(payload)
+                payload=payload[ip_header.ihl*4:]
+                print(payload)
 
-            # if(buff == 'quit'):
-            #     raise 'Client performed quit'
+            if not chan.active:
+                raise 'Client performed quit'
         except Exception as e:
             print(e)
             client.close()
@@ -82,6 +84,7 @@ class Server(paramiko.ServerInterface):
     
     def check_auth_password(self,username,password):
         if username == 'kali' and password == 'kali':
+            print("auth success")
             return paramiko.AUTH_SUCCESSFUL
         print('Authentication failed')
         print(username)
@@ -102,10 +105,10 @@ def firewall():
     
 # eve = threading.Event()
 def main():
-    addr = '127.0.0.1'
+    addr = '192.168.144.14'
     port = 22
     try:
-        threadpool.submit(firewall)
+        # threadpool.submit(firewall)
         ssh_server = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         ssh_server.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
         ssh_server.bind((addr,port))
@@ -114,6 +117,7 @@ def main():
         print("[*] Listening for connection....")
         while(activeThreads<=usableThreads):
             try:
+                print('Awaiting connection...')
                 client,addr = ssh_server.accept()
                 print("[*] Got a connection...")
             except Exception as e:

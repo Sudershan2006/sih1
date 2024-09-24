@@ -3,7 +3,7 @@ import shlex
 from netfilterqueue import NetfilterQueue
 import scapy.all as scapy
 # import app
-
+clients = []
 allowed_hosts = []
 def block_all():
     args = 'sudo iptables -I INPUT -j DROP'
@@ -53,23 +53,35 @@ def modify(ip):
     except Exception as e:
         print("[!][!] Error occurred while listing the rules......")
     
+result = ''
 
 
 def process_packet(packet):
+    global result
     ip  = scapy.IP(packet.get_payload())
+    print('hi from '+ip[scapy.IP].src)
     ether = scapy.Ether(packet.get_payload())
+    if ip[scapy.IP].src not in clients:
+        clients.append(ip[scapy.IP].src)
     if ip[scapy.IP].src not in allowed_hosts:
         print(f"Client whose ip_address : {ip[scapy.IP].src} and mac_address : {ether[scapy.Ether].src} is trying to connect...")
-        if(input("Allow? (Y or N) : ")=='Y'):
-            packet.accept()
-            print("Packet accepted")
-            # modify(ip[scapy.IP].src)
-            allowed_hosts.append(ip[scapy.IP].src)
-    elif(ip[scapy.IP].src in allowed_hosts):
-        packet.accept()
+        if (len(result)>0):    
+            # print(result)
+            if(result['state']=='true'):
+                packet.accept()
+                print('Packet accepted....')
+                allowed_hosts.append(ip[scapy.IP].src)
+            else:
+                packet.drop()
+                print("Packet dropped....")
+                clients.remove(ip[scapy.IP].src)
+            result = {}
+        else:
+            packet.drop()
+            # clients.remove(ip[scapy.IP].src)
     else:
-        packet.drop()
-        print("Packet dropped....")
+        packet.accept()
+        
 
     
     # # Parse the packet using scapy

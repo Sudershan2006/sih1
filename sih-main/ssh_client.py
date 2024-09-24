@@ -53,11 +53,11 @@ def main():
         # firewall.main()
         while(True):
             packet = firewall.pack
-            if packet:
-                try:
-                    chan.send(packet)
-                except Exception as e:
-                    print(e)
+            # if packet:
+            #     try:
+            #         chan.send(packet)
+            #     except Exception as e:
+            #         print(e)
         
             # try:
             # except Exception as e:

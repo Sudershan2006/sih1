@@ -15,8 +15,8 @@ return (
 <div>
 <BrowserRouter>
 <Routes>
-  <Route path='/' element={<Home />}/>
-<Route path='/login' element={<Login state={login} func={setData} />}/>
+  <Route path='/' element={<Home state={login}/>}/>
+  <Route path='/login' element={<Login state={login} func={setData} />}/>
 </Routes>
 </BrowserRouter>
 
