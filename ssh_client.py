@@ -6,6 +6,7 @@ import os
 import logging
 import pickle
 import firewall
+import threading
 from netfilterqueue import NetfilterQueue
 from getmac import get_mac_address
 
@@ -75,51 +76,116 @@ def process_packet(packet):
 
 
 
+# def main():
+#     user = "kali"
+#     password = "kali"
+#     ip = '192.168.232.70'
+#     port = 22
+
+#     global chan
+#     client,chan = establish_connection(ip, port, user, password)
+#     if client:
+#         print("Communicating with server")
+#         output = send_command(chan,'Client connected!')
+#         print(output)
+#         chan.send(getpass.getuser())
+#         chan.send(get_mac_address())
+#         print(chan.recv(1024).decode())
+#         # firewall.main()
+#         # nf.bind(0,process_packet)
+#         # try:
+#         #     print("Waiting for packets...")
+#         #     threading.Thread(target=nf.run).start()
+#         # except KeyboardInterrupt:
+#         #     nf.unbind()
+#         #     # raise 'Exception'
+#         #     firewall.flush()
+#         #     firewall.list()
+#         #     firewall.save_rules()
+#         #     raise 'Exception'
+#         try:
+#             while(True):
+#                 print(chan.active)
+#                 # packet = firewall.pack
+#                 # if packet:
+#                 # data = receive_output(chan)
+#                 # try:
+#                     # if data == 'quit':
+#                     #     raise 'Exception'
+#                     # chan.send(packet)
+#                 pass
+#                     # print(chan.active)
+                
+#         except KeyboardInterrupt as e:
+#             chan.close()
+#             print(e)
+#             print('Client disconnected...')
+#             firewall.flush()
+#             client.close()
+#                 # raise KeyboardInterrupt
+        
+#             # try:
+#             # except Exception as e:
+#             #     chan.send(e)
+#         # print("hi")
+
+# if __name__ == '__main__':
+#     main()
+
+class ServerDownError(Exception) :
+    def __init__(self,message):
+        self.message = message
+        super().__init__(self.message)
+
 def main():
     user = "kali"
     password = "kali"
-    ip = '192.168.248.113'
+    ip = '192.168.232.70'
     port = 22
 
     global chan
-    client,chan = establish_connection(ip, port, user, password)
+    client, chan = establish_connection(ip, port, user, password)
+    
     if client:
         print("Communicating with server")
-        output = send_command(chan,'Client connected!')
+        output = send_command(chan, 'Client connected!')
         print(output)
-        chan.send(getpass.getuser())
-        chan.send(get_mac_address())
+        chan.send(getpass.getuser().encode())
+        chan.send(get_mac_address().encode())
         print(chan.recv(1024).decode())
-        firewall.main()
-        nf.bind(0,process_packet)
-        while(True):
-            # packet = firewall.pack
-            # if packet:
-            # data = receive_output(chan)
-            try:
-                # if data == 'quit':
-                #     raise 'Exception'
-                # chan.send(packet)
-                try:
-                    print("Waiting for packets...")
-                    nf.run() 
-                except KeyboardInterrupt:
-                    nf.unbind()
-                    # raise 'Exception'
-                    firewall.flush()
-                    firewall.list()
-                    firewall.save_rules()
-                    raise 'Exception'
-            except Exception as e:
-                print(e)
-                firewall.flush()
-                client.close()
-                raise KeyboardInterrupt
+
+
+        try:
+            while True:
+                # chan = client.get_transport().get_channel()
+                if not client.get_transport().is_active():
+                    raise ServerDownError("Server is down")
+                if chan.active:
+                    pass
+                    # data = chan.recv(1024).decode()
+                    # if data :
+                    #     print(data)
+                    # Optionally check for data from the server
+                    # data = receive_output(chan)
+                    # if data:
+                    #     print(data)
+                else:
+                    print("Channel is no longer active.")
+                    break
+                
+        except ServerDownError as e:
+            print(e)
         
-            # try:
-            # except Exception as e:
-            #     chan.send(e)
-        # print("hi")
+        finally:
+            # Ensure proper cleanup
+            if client.get_transport().is_active():
+                client.get_transport().close()
+            if chan:
+                chan.close()
+            if client:
+                client.close()
+            print('Client disconnected...')
+            firewall.flush()
 
 if __name__ == '__main__':
     main()
