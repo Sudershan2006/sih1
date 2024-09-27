@@ -60,8 +60,21 @@ export const Home = (props) => {
         }
     }
 
+    const logout = async () =>{
+        try{
+            const response = await axios.post('http://localhost:5000/logout',{ data:'logout'});
+            console.log(response);
+            setLogin(false)
+            props.func(false)
+        }
+        catch(error){
+            console.error(error);
+        }
+    }
+
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '90vh' }}>
+            <button onClick={()=>{logout()}}>Log Out</button>
             <Paper sx={{ width: '50%', overflow: 'hidden' }}>
                 <TableContainer sx={{ maxHeight: 440 }}>
                     <Table stickyHeader aria-label="sticky table">

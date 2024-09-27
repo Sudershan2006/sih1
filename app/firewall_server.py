@@ -59,10 +59,12 @@ result = ''
 def process_packet(packet):
     global result
     ip  = scapy.IP(packet.get_payload())
-    print('hi from '+ip[scapy.IP].src)
+    # print('hi from '+ip[scapy.IP].src)
     ether = scapy.Ether(packet.get_payload())
-    if ip[scapy.IP].src not in clients:
+    if ip[scapy.IP].src not in clients and ip[scapy.IP].src not in allowed_hosts:
+        print('hi')
         clients.append(ip[scapy.IP].src)
+        # print(clients)
     if ip[scapy.IP].src not in allowed_hosts:
         print(f"Client whose ip_address : {ip[scapy.IP].src} and mac_address : {ether[scapy.Ether].src} is trying to connect...")
         if (len(result)>0):    
@@ -80,7 +82,10 @@ def process_packet(packet):
             packet.drop()
             # clients.remove(ip[scapy.IP].src)
     else:
-        packet.accept()
+        if ip[scapy.IP].src in allowed_hosts:
+            # if ip[scapy.IP].src not in clients:
+            #     clients.append(ip[scapy.IP].src)
+            packet.accept()
         
 
     
