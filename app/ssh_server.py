@@ -14,60 +14,105 @@ usableThreads = 12
 
 
 client_list = []
-allowed_hosts = firewall_server.allowed_hosts
-clients = firewall_server.clients
+# allowed_hosts = firewall_server.allowed_hosts
+# clients = firewall_server.clients
+client_objects = []
+channels = []
+ssh_running = True
 
 threadpool = futures.ThreadPoolExecutor(max_workers=usableThreads)
 lock = threading.Lock()
 
 def call():
-    return client_list,allowed_hosts,clients
+    return client_list,firewall_server.allowed_hosts,firewall_server.clients
 
 # CWD = os.path.dirname(os.path.realpath(__file__))
 hostkey = paramiko.RSAKey(filename='/home/kali/.ssh/id_rsa',password='Sudershan@98421')
 
-
-def client_handler(client,server,event,ip):
+def client_handler(client,session, ip):
     global activeThreads
     with lock:
         activeThreads += 1
-    session = paramiko.Transport(client)
-    session.add_server_key(hostkey)
-    session.start_server(server=server,event=threading.Event())
-    print("Awaiting connection")
+    # print("Awaiting connection")
+    
     chan = session.accept(20)
-
+    channels.append(chan)
+    client_objects.append(client)
     if chan is None:
         event.set()
         return 
 
-    print(chan.recv(1024).decode())
-    chan.send("Welcome to the session")
-    client_user = chan.recv(1024).decode()
-    client_ip = ip
-    client_mac = chan.recv(1024).decode()
-    chan.send('Got your details...')
-    client_list.append(dict(user_name=client_user,ip=client_ip,mac=client_mac))
-    while(True):
-        try:
-            buff = chan.recv(1024)
-            if buff:
-                print(buff)
-                ob = pickle.loads(buff)
-                payload=ob.get('payload')
-                ip_header=scapy.IP(payload)
-                payload=payload[ip_header.ihl*4:]
-                print(payload)
-
+    try:
+        print(chan.recv(1024).decode())
+        chan.send("Welcome to the session".encode())
+        client_user = chan.recv(1024).decode()
+        client_ip = ip
+        client_mac = chan.recv(1024).decode()
+        chan.send('Got your details...'.encode())
+        client_list.append(dict(user_name=client_user, ip=client_ip, mac=client_mac))
+        
+        while True:
+            # Check if the channel is still active
+            if not ssh_running:
+                break
             if not chan.active:
-                raise 'Client performed quit'
+                print(f"Channel is no longer active for {ip}.")
+                break
+            
+            try:
+                buff = chan.recv(1024)
+                if buff:
+                    print(buff)
+                    ob = pickle.loads(buff)
+                    payload = ob.get('payload')
+                    ip_header = scapy.IP(payload)
+                    payload = payload[ip_header.ihl * 4:]
+                    print(payload)
+                else:
+                    print(f"No data received from {ip}. Client may have disconnected.")
+                    break  # Break if no data is received
+            except Exception as e:
+                print(f"Error while receiving data: {e}")
+                break
+
+    except Exception as e:
+        print(f"Error in client handler: {e}")
+    
+    finally:
+        print(f"Closing connection for {ip}")
+        session.close()
+        try:
+            if chan.active:
+                chan.close()
         except Exception as e:
-            print(e)
-            client.close()
-            print(f"Client disconnected....{ip}")
-            break
-    event.set()
-    return   
+            print(f"Error closing channel: {e}")
+        
+        try:
+            if client in client_objects:
+                client_objects.remove(client)
+            if ip in firewall_server.clients:
+                firewall_server.clients.remove(ip)
+            # if ip in firewall_server.allowed_hosts:
+            #     firewall_server.allowed_hosts.remove(ip)
+            client_list[:] = [dic for dic in client_list if dic['ip'] != ip]
+
+            # print(clients)
+            # print(allowed_hosts)
+            # print(client_list)
+            
+        except Exception as e:
+            print(f"Error removing client from list: {e}")
+        
+        try:
+            if chan in channels:
+                channels.remove(chan)
+        except Exception as e:
+            print(f"Error removing channel from list: {e}")
+
+        print(chan.active)
+        
+        with lock:
+            activeThreads -= 1
 
 
 # pkey = paramiko.pkey.PKey()
@@ -94,6 +139,12 @@ class Server(paramiko.ServerInterface):
         self.completion_event.set()
         return True
 
+def handleTerminate():
+    while True:
+        # print('hi')
+        if not ssh_running :
+            sys.exit(1)
+
 def firewall():
     try:
         firewall_server.main()
@@ -102,35 +153,45 @@ def firewall():
         print("Exiting")
         firewall_server.nf.unbind()
         # firewall_server.flush()
+
     
 # eve = threading.Event()
 def main():
-    addr = '192.168.144.14'
+    addr = '192.168.232.70'
     port = 22
     try:
-        # threadpool.submit(firewall)
+        global activeThreads
+        threadpool.submit(firewall)
         ssh_server = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
         ssh_server.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
         ssh_server.bind((addr,port))
         ssh_server.listen(100)
-        server = Server()
+        threading.Thread(target=handleTerminate).start()
+        
         print("[*] Listening for connection....")
-        while(activeThreads<=usableThreads):
+        while activeThreads <= usableThreads:
             try:
-                print('Awaiting connection...')
-                client,addr = ssh_server.accept()
-                print("[*] Got a connection...")
+                client, addr = ssh_server.accept()
+                print("[*] Got a connection from:", addr)
+
+                # Create a new session for each connection
+                session = paramiko.Transport(client)
+                session.add_server_key(hostkey)
+                server = Server()
+                session.start_server(server=server)
+
+                # Start a new thread to handle the client
+                threadpool.submit(client_handler, client, session, addr[0])
+                
             except Exception as e:
-                print(e)
-            event = threading.Event()
-            if client:
-                print("Establishing session with "+addr[0])
-                threadpool.submit(client_handler,client,server,event,addr[0])
-    except Exception as e:
+                print(f"Error accepting connection: {e}")
+    except KeyboardInterrupt:
         print(e)
-    finally:
-        ssh_server.close()
-        firewall_server.flush()
+    # finally:
+        # print("Shutting down the server....")
+        # # chan.close()
+        # ssh_server.close()
+        # firewall_server.flush()
         # threadpool.shutdown(wait=True)
         # print(os.getpid())
         # eve.set()
